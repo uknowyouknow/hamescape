@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>탈출 게임</title>
+<style>
+:root{--bg:#0b1316;--text:#d9d3c4;--lamp:#e0a95a;--line:#2c3d3a;--paper:#d1d6c8;--postit:#e3d36f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Batang','바탕','Noto Serif KR',serif;line-height:1.8}
+button,input{font:inherit;color:inherit}
+header{display:flex;justify-content:space-between;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line);font-size:14px;flex-wrap:wrap}
+#inv span{display:inline-block;margin-left:6px;padding:0 9px}
+#inv .item{border:1px solid var(--lamp);color:var(--lamp)}
+#inv .word{background:var(--postit);color:#2b2a1a;transform:rotate(-2deg);font-weight:bold}
+#stage{position:relative;width:min(100% - 24px,960px);aspect-ratio:16/9;margin:14px auto;overflow:hidden;border:1px solid var(--line)}
+.spot{position:absolute;border:1px dashed #5c7570;background:#ffffff08;cursor:pointer;display:flex;align-items:flex-end;padding:4px 8px;font-size:13px;color:#b8c2bb;text-align:left}
+.spot:hover,.spot:focus-visible{border-color:var(--lamp);color:var(--lamp);outline:none}
+.spot:disabled{cursor:default;opacity:.4}
+#dark{position:absolute;inset:0;pointer-events:none;
+ background:radial-gradient(circle var(--r,120px) at var(--x,50%) var(--y,50%),transparent 0,rgba(5,8,10,var(--a,.95)) 100%)}
+#room{padding:0 18px;text-align:center;font-size:15px;color:#9fb0aa}
+#box{width:min(100% - 24px,960px);margin:12px auto 30px;border:1px solid var(--line);padding:16px 20px;min-height:130px;background:#0f191b}
+#box p{margin:0 0 10px;white-space:pre-line}
+#box button{border:1px solid var(--line);background:#16262a;padding:7px 16px;cursor:pointer;margin:0 8px 6px 0}
+#box button:hover{border-color:var(--lamp)}
+#box input{background:#0b1316;border:1px solid var(--line);padding:7px;width:130px;text-align:center;letter-spacing:.35em;margin-right:8px}
+#box input.wide{width:min(100%,340px);letter-spacing:normal}
+.bad{color:#d98b7c}.big{font-size:20px}
+.clue{background:#081116;border:1px solid var(--line);padding:12px 16px;font-family:'Consolas','D2Coding',monospace;white-space:pre-line;margin:0 0 12px}
+.book{background:var(--paper);color:#243c42;padding:14px 18px;margin:0 0 12px}
+.book div{line-height:1.9}
+.pic img{display:block;max-width:100%;max-height:340px;margin:6px auto 12px;border:1px solid var(--line)}
+.pic.empty{border:1px dashed #5c7570;padding:36px 16px;text-align:center;color:#9fb0aa;margin-bottom:12px}
+</style>
+</head>
+<body>
+<header><span id="where"></span><span id="inv"></span></header>
+<div id="room"></div>
+<div id="stage"><div id="dark"></div></div>
+<div id="box"></div>
+
+<script>
+const SAVE_KEY = 'ham_escape_v2';
+
+const IMG = { puzzle1: 'https://postfiles.pstatic.net/MjAyNjEwMTVfMjYg/MDAxNzkxOTkwMjQ2MzMx.xR7m4XQXd2xH7PUGrrBBR00UXAd8twc0_FjONwlCDxgg._KONo4nmN3luVZc7VnBGjI5oonuWpFHY3PrTgiUVkfcg.PNG/900_%EB%AC%B4%EC%A0%9C17_20261015000319.png?type=w3840' };
+
+const ITEMS = { card:'카드키', wire:'전선', key:'열쇠' };
+const EXTRA = {};
+
+/* 정답을 맞히기 전까지는 열리지 않는 내용 (정답으로 암호화됨) */
+const LOCKED = { iter:300000, stages:[
+  {"salt":"55bPwKo5akKHwu2B18swYg==","iv":"JhjRbblqF2+V4NbW","data":"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"},
+  {"salt":"/8mseX4+Z6pwbWAh1G26vg==","iv":"BdjV1JKk8up/njGG","data":"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"},
+  {"salt":"XAjI5XK6M8Guy/kQar7ANg==","iv":"A/aOt7FGcWKsUVyQ","data":"ekIa1Jz7tqbUxy8l95aahPxVlno4hDtI5RYlAGOJLmQ1w+jLcAhjsr9U9c9w/ZkCPsZ+N3FQiZIbfPVGrWF26hH9xow+jd+mDhwJFUJtL1Ao8YE3q+wUmR4bdZ4qPYzeybEqeaeGrF1d6QuclOfjZBCclVKRxqjkimhvqj/iG58kkrNWhD29o9DbMX9w/N3ZIg/NYCEou0fro0QnK4oT9ISdpsGeABhH58byMRCARnHS18gt3/ZAhJdYPlFL4iuz2oYMfvL8JbXPl7PNS6J5XCnOqmL6Phy0XWnFfh/Ib0YTfSIp1QX8yYePnHLs5mUVmVmDsZVZ4eZ8yUPzzXZ4nVVFB6bciUh/3/8YrF4p3CXfVG3kC8431LiOfivw4egg9if0seKPE2dMgk9vs7uuvkMuaB6IfBVipDhBuOyjC2e82yv+2hYK467Bs4iqfWJhJZhctfpwBjp+0YW0ik4CUNAjkaY1HoolY4vtgLW6MS90EmMfBx52hgEPBaDpIPhNXdZU35qpVsi/XvUNwg8vUpSYG48t0FYmVJbJjyacy32zW1XBVuXJL6JUjZ6yJzuphHhnWizgoTRpWFLMxvhfEHFyTi+V+zQQtK4VjsI5FNavNUBWyP304MUneE8SVQjB3imYVHAZWnh+1ermS6g6zgbJEG7QXtbvB1jQibpFWJfJhGw8clnosQAwrW4HOIoIeDQMMRchdEnnUx/ttzobro7iimLG2GofICYwrol6Zw+RTibXgn+0FzbRU0TciGp0TiViaBKlo5keeCoQcsuORE4ZNPsOqsh9knuNeVCLqEePvaDMNjJSSIV/iBA5OA9z+20mXlEibaYy3YkAcAhWdWoctMyLhD20Qe6fp3BFQa8+kWHw93z/K8SmKpOv+fAz0jU/CsoekS4piE4Nz7+mX09nF67mx89e2C7TTCC2Kz8p/cY7zas4rli+/KkvbqNt6WUTJnbSbSFCsolWjlJFGJzAnWHH4smKAxCm3o7FrD5jFsDfN4gy94wG/wQbR2jekOoKRuvokSd8/ExTLba5xNty/TnSw8hz25YLMKhWqyCxZ49aPvZfktdpaovVGUK/Ez3hTEzDIL7AwjFbg2lxeJYJIyh8t+XjYT439zMS6mEnyRwRdso/K53u273FAH8tDbeknDy2sZU9FhEnLje4DKAb5dK5pcrP41VUwI9vifrfi7W5uurTVUvt7VTU8o+sFnIcgqIW24rZyOscf5+hqXtQEMXu3LbJipYXI1yeFcS/d5XCNCB5E+Wb2vQZ7hE0a8cugYp4F0N+Wwttf9SzcQPFI+f/zUbomXgLleBjVKNNUX3VhEyAElKFYDwhsfp9Ebp/q5QmruT5rtRKDVLtNN3hDeS9rE1ZX13ONPlOsVc7WAzlD1KcW0b3q5lBwkrEHgyNQj5cTSud8F/5vqYWSM1yT1LaEmjlwaxbbciYlqeO89FPhpepMmSDANFpNDYwbi6yiKnH3xklZqXwLebK8NUHEy93MLTuLTAxPHaoIWA4NP9WBiz5bO/M/mq9CK4blixQDFaLkxlJbWcgrf64ZgIy7OB8FQu8+hvYr79tXKKEIZl8H/NMvefvMKmcIM3fIx6WC0TU7LbB1Kv4CUz8XndXnvcDdJAuoqzGT2MU+0bTWOkluqtRLSRiM+7APCgGj7XGzt3SoxiKGhU9w3X5PMbitfztP4g4uMPdnISYsn91DI04m5AnKNQGA0G/nmTEkHTWuBPYNW/JuxnD/1FYdcCLXfDqHXtNJiLvPB8vtzjuGNRjSN4C7WDqkyFXIBg3Z3RgIxa2jv8CVg1IwVcDLYoEpwI8HuKLWooTz4SJ1nFtmhKrDOTOs6p4vliYLbKbmMKp3hRJSPkFH8tZG38CZPfZbpgvPZovbRGzsFFPyUhFY/UAo1pEk4agvIcAetaLmc1gCjT2Xa1R+xqixD1CE84e0TbxHPB0AIibqbBhPP/tI+Kp8WSAD0TNob0+atZXj+rqRlvCz417EHCH19x6Ppxg0o4hm2QslEo38JX5qHYcGIIOXmq4CF5W17DdoQ3aPNdJxFXVEfMxAAiyxU4y01IPkgGmQGYUGlhSbUkR6ttDJgM/N7pyAWqepFYigrFFGjOstn1PY1oZBSlilx19Jk5J/nEi2/+Rl3O0n1iYOtUHMLuM8bfrcUPPjh2mCh/f6xlZMTPyENrbzoS4GHljZenuPGRsC3acOV6m+XPm7U2T"},
+  {"salt":"sb72j8krrPyNlZpIs/w9NA==","iv":"fWoo3q4QpyvawOg2","data":"jPTbDC0L60Lq7btYWElgtoA+FnG/RWVwYeIec8S9hp6mK9Q5upKfqrl4ZP0ndet9M0qYZcB3d/NjprdVC0yekIBqUacRDzWiHuuWH72n/ess5RcxFfv4XmKxyhlD1cEY2UyXkIdz8UtmACyRcifvIP91vDbVoJ56oiltkGPXXDDIMiA8V72fCqRsDmRaA1cjFKXWgKIimZ5AnYMyZRcVW6vsk6AT85fCBzTHWUA2N64lgaVS0NiRJGnvWeyOboTZS0hkXw2COgsYgLhJaqdu5DDNV1WzcChAi5gPsBcZSoNh3Fo9lca3CaaRS20rS0irdKWbsn6VbT5A4gBKJPPWDk+H7loPipb9F5cp+gyko+ibN5wOoXqHc7ozuty28wr3uqNdB/nC2ZuoszqguxXVN6BYhlpQYgywTksIZMI/FNO3QScSmfkYxYwfc8dr7m4TawJUOJxgsgpNKjD3PQ8Kvr9BoLwEteziPf1KEhpUidSbQg=="},
+  {"salt":"EM7Smbn4+LBAqOIavJ6Now==","iv":"zzuak9Jt2WlPev6/","data":"BgHOuEJKrXLbY2KdFbR3UjYYhgkB6XJtGqu8NoAMfyn9KUhAGZhnHVrdb/grYNewuSGHO/SMRKxgl5goEX9CE3PQJtvsOk4tZEz4x+fse6i6Fjnqcs18xSLW5eH8DNePWiCTwzIDcpOEMRvk9QHBae/ogJRmLbETFvntrbREC7e949PT3eWxG6oHfM7WmWbElXdZBDXg6Fbi4M+eIMv2xnFay+AUFStD6712o7YG8kBi4mWK7SpcYLLBQld8eIFWF63hro7vnuCnXXZJHryO8qO4w4DjPoSATweBeH1hMGhFrRvVSAckz5ALsJCpY1PePyVpL8VumG2QNkzcx5NJ3Ak5PxUo41lkHpcbV/4LFrtgTapuMSvwwFqP12gKnE55JB+9BbJmoToWrrknGG0bQ523c0EX36tp+7TJWgxpE6XkmP//NKaIrlEsdLqeGnxhH2+YG1DQzCrEd9vKHPTqZmgna1t3rMP1ipnVNNulRxnaXpC8Peo1dvwJgnZLh4nY6OTg23RUf5n4cMDlanHvd0C9AS+eTwl11rt1twg2zVU8ZIgzriY2Gb4I/aVnfV6kCkT1nMt0q4oU+dDwnrRajCy9b8I6YiaEoNUQwwDMk/YUxK8zjlnussUEdivIh0mo3TrNC37p1/HeCHvTGyY/fUPw+Xrx+H5eS0bXQgupYW3B0rOqFcbf4zAkQhLRE2neh7/1k3L6RDXDQf3kNP32h7dXxA7f1UVQH6r3h6MoiwVBvHK9UzJrSooZk5IV8y0LA0ajOhUMUx3TC2Hm7pO9o2fk5CyHhxoKohHIa9zSIXiu1uofAigG4IImDygnCtFGFCC9tY0oyu3HcHq9H+QzWxJEKBI/LaqOWTV7NOSJuQvvaVg4jQxjS9QVHQfcJFP6Exz4OHLGuSR30rslVH+lZs/9EnsGLGg2QFivZDTumIFkhigr4FRnBfI05nRRk2bj0ai2O+UoRhN+vfwRscT4hlHhfPNlifxtbp2HrBhLrywR3WvA+8VQ0Tl8uDrBDT0kH0J/M43NoompVxCN1BBmIXEXvDJqCl2n/yQl2e61CzMR5a61RrZR7/lkLKZerPmbW44UesO7nshaFoLsenX8xkSAsHeLgRTOvKkJytH7g27HiJ/drEuDLnLchH+8AiE2bL+Tr4amI5Jf2VpzjHEqSzrw/3lIkclJgzzWhqFIb3eDETe1hQ/+ScMCWpVfuFztQZfQvO/ZgwcOS5DyrxQctrCq7flPvo4NkV+6zcpVUA6Ei2nnxLzSIgh6vRg1AGbdsw1i1zsaBFwFeJAt57oR71zjD5D4hmBvSYh4h+utu5gTVtTUppSasIHa5fTxI0Evwido6AA6rlNG7Zdi7qrKzCqVa9MUIdAKwMEC5rmzBx6V/CeycBi0FDSxsFj80mFxjcnY06wVOgtj"},
+  {"salt":"XfHdXjhLOTHnIY+u0luDEg==","iv":"lljsegQn/n+4WDvO","data":"pF32SZw8m/Q6gTqOqZNJsMlB+bSsCBgarL3oTqVkH9VYFvcHjqV//FTJTvlxCrrjniSGtHQGVJleCqbL6rciXQnkuJTznbkCyw+vHl4VWu4Ep1NhZImE98fm1kMqIc1xLgjDBXdyD/iZWM0HOarD6I8OCkriqnlT+vKZ+qCumvNKA7lSc/QPk8I3kz6YOpN9Zc8WtQ9UxTuALb9KoM2ZV0bTlpAh6h2jUMnTeJYI6m2X6EtfnpcFzWwXmqOwAZAcqiPBLVPn6X/4ImUAg8hJF30nuS42ntK5/1DoAGdsSgH7rGU="},
+  {"salt":"MV7apEggXm2r+h/FvRIqxg==","iv":"qbBK7geTPlWezTEu","data":"4HybYIxMcOYg4KNlyso8BbgYjuwYxlyADeUyr42x6XBp6zIT5nkWr6jlynLDvtmPefco7p0IieNdbNyHodq+iKdMZYIjR1J/YVjxJoHzFVXMF7xvpKjekwVtWT5AGVIf1xXQarysNJeREkHuaxQuwcwPyuDJrcm1NDtccRqYxWezX+rujkCNg1hahPtd+513o3zDAwQ/T5z7As7EY9Jh8N88xl5m+aKXyMWxshf/Ag+d0sURBMFLfQc5kSCB5lJYtLrdu+eXHWqTsh9L63e/aKUeVRJ25SDVCcQ5CFd+woOenQbP0QD/aYUhBla0fXbIjxxK0csW+XrNYh2XCSA4I0M="}
+]};
+
+/* 처음부터 보이는 방: 지하실, 복도 */
+const ROOMS = {
+  cellar:{ name:'지하실', bg:'#0f1819', r:110, a:.97,
+    desc:'습기 찬 어둠. 손끝에 차가운 벽이 닿는다. 어디선가 물 떨어지는 소리가 난다.',
+    spots:[ {id:'puddle',label:'물웅덩이',x:10,y:62,w:22,h:20},
+            {id:'cellarDoor',label:'철문',x:70,y:12,w:20,h:66} ]},
+  hall:{ name:'복도', bg:'#121d1e', r:125, a:.95,
+    desc:'지하실 밖은 좁은 복도다. 벽에 그림이 걸려 있고, 끝에는 잠긴 문이 있다.',
+    spots:[ {id:'art',label:'벽에 걸린 그림',x:10,y:16,w:30,h:40},
+            {id:'hallDoor',label:'잠긴 문',x:68,y:12,w:22,h:66} ]}
+};
+
+const ACTIONS = {
+  puddle(){ say('차가운 물이 고여 있다. 천장에서 한 방울씩 떨어진다.'); },
+  cellarDoor(){ say('녹슨 철문이 삐걱 소리를 내며 열린다.',[['나간다',()=>go('hall')]]); },
+  art(){
+    show([el('p','벽에 그림이 걸려 있다. 가만히 들여다본다.'), imageBox(IMG.puzzle1)],
+         [['닫기',()=>say(ROOMS[S.room].desc)]]);
+  },
+  hallDoor(){
+    if (S.flags.hallOpen) return go('study');
+    ask({ stage:1, len:4, text:'네 자리 숫자 자물쇠가 걸려 있다.' });
+  }
+};
+
+/* =========================================================
+   잠금 해제 — 지금까지 맞힌 정답들로 열쇠를 만들어 다음 내용을 복호화
+   ========================================================= */
+const b64 = s => Uint8Array.from(atob(s), c=>c.charCodeAt(0));
+async function deriveKey(answers, salt){
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(answers.join('|')), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2', hash:'SHA-256', salt, iterations:LOCKED.iter},
+    base, {name:'AES-GCM', length:256}, false, ['decrypt']);
+}
+/* 성공하면 "정답 맞힌 순간 실행할 함수"를, 틀리면 null 을 돌려줌 */
+async function unlock(stage, answers){
+  const p = LOCKED.stages[stage-1];
+  try{
+    const key = await deriveKey(answers, b64(p.salt));
+    const plain = await crypto.subtle.decrypt({name:'AES-GCM', iv:b64(p.iv)}, key, b64(p.data));
+    return new Function(new TextDecoder().decode(plain))();
+  }catch(e){ return null; }
+}
+
+/* =========================================================
+   엔진
+   ========================================================= */
+let S = newState();
+function newState(){ return { room:'cellar', items:[], words:[], flags:{}, solved:[] }; }
+const $ = id => document.getElementById(id);
+const has = k => S.items.includes(k);
+
+function el(tag,text,cls){ const e=document.createElement(tag); if(text) e.textContent=text; if(cls) e.className=cls; return e; }
+function save(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(S)); }catch(e){} }
+function commit(){ save(); render(); }
+function addItem(k){ if(!has(k)) S.items.push(k); commit(); }
+function addWord(w){ if(!S.words.includes(w)) S.words.push(w); commit(); }
+function go(room){ S.room=room; commit(); say(ROOMS[room].desc); }
+
+function show(nodes,buttons=[]){
+  const b=$('box'); b.innerHTML='';
+  nodes.forEach(n=>b.appendChild(n));
+  buttons.forEach(([label,fn])=>{ const x=el('button',label); x.onclick=fn; b.appendChild(x); });
+}
+function say(text,buttons){ show([el('p',text)],buttons||[]); }
+
+/* 정답 입력창. mode: 'digits'(숫자) | 'upper'(영문 자동 대문자) | 'text'(문장) */
+function ask(o){
+  const mode=o.mode||'digits';
+  const input=el('input'); input.autocomplete='off'; input.spellcheck=false; input.setAttribute('aria-label','정답 입력');
+  if(mode==='text'){ input.maxLength=40; input.className='wide'; input.placeholder='여기에 입력'; }
+  else { input.maxLength=o.len; input.placeholder='_'.repeat(o.len); if(mode==='digits') input.inputMode='numeric'; }
+  input.addEventListener('input',()=>{
+    if(mode==='digits') input.value=input.value.replace(/\D/g,'');
+    if(mode==='upper')  input.value=input.value.replace(/[^a-zA-Z]/g,'').toUpperCase();
+  });
+  const norm=s=> mode==='text' ? s.trim().toLowerCase().replace(/\s+/g,' ').replace(/[.!]+$/,'') : s;
+  const msg=el('p','','bad');
+  const ok=el('button','입력');
+  let busy=false;
+  const check=async()=>{
+    if(busy || !input.value) return;
+    busy=true; ok.disabled=true; msg.textContent='확인 중...';
+    const v=norm(input.value);
+    const onOk = S.solved.length===o.stage-1 ? await unlock(o.stage,[...S.solved,v]) : null;
+    busy=false; ok.disabled=false;
+    if(onOk){ S.solved.push(v); save(); onOk(); }
+    else { msg.textContent=o.wrong||'맞지 않는다.'; input.value=''; input.focus(); }
+  };
+  input.onkeydown=e=>{ if(e.key==='Enter') check(); };
+  ok.onclick=check;
+  const no=el('button','그만둔다'); no.onclick=()=>say(ROOMS[S.room].desc);
+  const row=el('div'); row.append(input,ok,no);
+  show([el('p',o.text),...(o.extra||[]),row,msg]);
+  input.focus();
+}
+
+function imageBox(src){
+  const w=el('div','','pic'); const img=new Image(); img.alt='문제 그림'; img.src=src;
+  img.onerror=()=>{ w.className='pic empty'; w.textContent='[그림을 불러오지 못했습니다]'; };
+  w.appendChild(img); return w;
+}
+
+function render(){
+  const r=ROOMS[S.room];
+  $('where').textContent=r.name; $('room').textContent=r.desc;
+  const inv=$('inv'); inv.innerHTML='';
+  S.items.forEach(k=>inv.appendChild(el('span',ITEMS[k],'item')));
+  S.words.forEach(w=>inv.appendChild(el('span',w,'word')));
+  const stage=$('stage'), dark=$('dark');
+  stage.style.background=r.bg;
+  dark.style.setProperty('--r',r.r+'px'); dark.style.setProperty('--a',r.a);
+  stage.querySelectorAll('.spot').forEach(e=>e.remove());
+  r.spots.forEach(sp=>{
+    const b=el('button',sp.label,'spot');
+    Object.assign(b.style,{left:sp.x+'%',top:sp.y+'%',width:sp.w+'%',height:sp.h+'%'});
+    b.onclick=ACTIONS[sp.id];
+    b.onfocus=()=>light(sp.x+sp.w/2,sp.y+sp.h/2);
+    stage.insertBefore(b,dark);
+  });
+}
+
+function light(x,y){ const d=$('dark'); d.style.setProperty('--x',x+'%'); d.style.setProperty('--y',y+'%'); }
+function follow(e){ const r=$('stage').getBoundingClientRect(); light((e.clientX-r.left)/r.width*100,(e.clientY-r.top)/r.height*100); }
+$('stage').addEventListener('pointermove',follow);
+$('stage').addEventListener('pointerdown',follow);
+
+function start(){
+  S=newState(); save(); render();
+  say('눈을 뜨자 아무것도 보이지 않는다. 손을 뻗어 주변을 더듬어 본다.\n(마우스를 움직여 빛으로 주변을 비춰 보세요)');
+}
+
+/* 이어하기: 저장된 정답들로 지금까지 열었던 내용을 다시 복호화 */
+(async function init(){
+  let saved=null;
+  try{ saved=JSON.parse(localStorage.getItem(SAVE_KEY)); }catch(e){}
+  if(!(saved && Array.isArray(saved.solved))) return start();
+  say('기록을 불러오는 중...');
+  for(let i=0;i<saved.solved.length;i++){
+    if(!await unlock(i+1, saved.solved.slice(0,i+1))) return start();
+  }
+  if(!ROOMS[saved.room]) return start();
+  S=Object.assign(newState(),saved); render();
+  say('이전 기록이 남아 있다.',[['이어하기',()=>say(ROOMS[S.room].desc)],['새로 시작',start]]);
+})();
+</script>
+</body>
+</html>
