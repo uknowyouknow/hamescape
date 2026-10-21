@@ -31,6 +31,14 @@ header{display:flex;justify-content:space-between;gap:12px;padding:12px 18px;bor
 .book{background:var(--paper);color:#243c42;padding:14px 18px;margin:0 0 12px}
 .book div{line-height:1.9}
 .pic img{display:block;max-width:100%;max-height:340px;margin:6px auto 12px;border:1px solid var(--line)}
+.cal{background:var(--paper);color:#243c42;padding:14px 18px 18px;margin:0 auto 12px;max-width:380px;position:relative}
+.cal-title{text-align:center;font-size:20px;font-weight:bold;margin-bottom:6px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+.cal-head{font-size:13px;font-weight:bold;border-bottom:1px solid #9aa79c}
+.cal-day{padding:3px 0;font-size:14px}
+.sun{color:#a8483a}
+.circled{border:2px solid #b0302a;border-radius:50%;font-weight:bold}
+.cal-note{text-align:right;margin-top:8px;color:#b0302a;font-weight:bold;font-size:18px;transform:rotate(-4deg)}
 .pic.empty{border:1px dashed #5c7570;padding:36px 16px;text-align:center;color:#9fb0aa;margin-bottom:12px}
 </style>
 </head>
@@ -67,6 +75,13 @@ const ROOMS = {
     desc:'습기 찬 어둠. 손끝에 차가운 벽이 닿는다. 어디선가 물 떨어지는 소리가 난다.',
     spots:[ {id:'puddle',label:'물웅덩이',x:10,y:62,w:22,h:20},
             {id:'cellarDoor',label:'철문',x:70,y:12,w:20,h:66} ]},
+  gate:{ name:'빈 방', bg:'#101a1b', r:115, a:.96,
+    desc:'아무것도 없는 방이다. 맞은편 문 옆에 여섯 자리 번호판이 붙어 있다.',
+    spots:[ {id:'gateLock',label:'번호판',x:62,y:20,w:24,h:56} ]},
+  library:{ name:'서재', bg:'#131c1c', r:120, a:.96,
+    desc:'낡은 책꽂이가 벽 한쪽을 채우고 있다. 반대편 문에는 번호판이 달려 있다.',
+    spots:[ {id:'shelf',label:'책꽂이',x:8,y:10,w:38,h:72},
+            {id:'libLock',label:'번호판',x:68,y:20,w:22,h:56} ]},
   hall:{ name:'복도', bg:'#121d1e', r:125, a:.95,
     desc:'지하실 밖은 좁은 복도다. 벽에 그림이 걸려 있고, 끝에는 잠긴 문이 있다.',
     spots:[ {id:'art',label:'벽에 걸린 그림',x:10,y:16,w:30,h:40},
@@ -75,7 +90,25 @@ const ROOMS = {
 
 const ACTIONS = {
   puddle(){ say('차가운 물이 고여 있다. 천장에서 한 방울씩 떨어진다.'); },
-  cellarDoor(){ say('녹슨 철문이 삐걱 소리를 내며 열린다.',[['나간다',()=>go('hall')]]); },
+  cellarDoor(){ say('녹슨 철문이 삐걱 소리를 내며 열린다.',[['나간다',()=>go(S.flags.libOpen?'hall':S.flags.gateOpen?'library':'gate')]]); },
+  gateLock(){
+    if (S.flags.gateOpen) return go('library');
+    ask({ len:6, pre:'gate',
+      text:'번호판 위에 누군가 긁어 쓴 글씨가 있다.',
+      extra:[el('div','"구차한 별명은 필요 없어, 이미 너무 많은 일이 지나가버렸고 넌 사사건건 일을 방해했지.."','clue')],
+      onOk:()=>{ S.flags.gateOpen=true; save(); say('딸깍. 문이 열렸다.',[['들어간다',()=>go('library')]]); } });
+  },
+  shelf(){
+    show([el('p','책들 사이에 무언가 끼워져 있다. 꺼내 보니 달력이다.'), calendar()],
+         [['닫기',()=>say(ROOMS[S.room].desc)]]);
+  },
+  libLock(){
+    if (S.flags.libOpen) return go('hall');
+    ask({ len:3, pre:'library',
+      text:'번호판 아래에 작게 적혀 있다.',
+      extra:[el('div','힌트: *(또는 X)','clue')],
+      onOk:()=>{ S.flags.libOpen=true; save(); say('딸깍. 문이 열렸다.',[['나간다',()=>go('hall')]]); } });
+  },
   art(){
     show([el('p','벽에 그림이 걸려 있다. 가만히 들여다본다.'), imageBox(IMG.puzzle1)],
          [['닫기',()=>say(ROOMS[S.room].desc)]]);
@@ -85,6 +118,32 @@ const ACTIONS = {
     ask({ stage:1, len:4, text:'네 자리 숫자 자물쇠가 걸려 있다.' });
   }
 };
+
+const PRE = {
+  gate:'bcd56c1fa3b206fa4f2f29fab8f375ff430a2afcb37005dcc8a68d97ad51a99e',
+  library:'8d1921ee68dd7813d8242f3102d89e9bbe25df733a83d6db69463c09080303ef'
+};
+async function sha256(s){
+  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function calendar(){
+  const w=el('div','','cal');
+  w.appendChild(el('div','7월','cal-title'));
+  const g=el('div','','cal-grid');
+  ['일','월','화','수','목','금','토'].forEach((d,i)=>g.appendChild(el('div',d,'cal-head'+(i===0?' sun':''))));
+  for(let i=0;i<3;i++) g.appendChild(el('div'));            // 7월 1일 = 수요일
+  for(let d=1;d<=31;d++){
+    const c=el('div',String(d),'cal-day');
+    if((d+2)%7===0) c.classList.add('sun');
+    if(d===13||d===14) c.classList.add('circled');
+    g.appendChild(c);
+  }
+  w.appendChild(g);
+  w.appendChild(el('div','햄 MT!!','cal-note'));
+  return w;
+}
 
 const b64 = s => Uint8Array.from(atob(s), c=>c.charCodeAt(0));
 async function deriveKey(answers, salt){
@@ -138,6 +197,12 @@ function ask(o){
     if(busy || !input.value) return;
     busy=true; ok.disabled=true; msg.textContent='확인 중...';
     const v=norm(input.value);
+    if(o.pre){
+      const good = (await sha256('ham_pre|'+o.pre+'|'+v))===PRE[o.pre];
+      busy=false; ok.disabled=false;
+      if(good) return o.onOk();
+      msg.textContent=o.wrong||'맞지 않는다.'; input.value=''; input.focus(); return;
+    }
     const onOk = S.solved.length===o.stage-1 ? await unlock(o.stage,[...S.solved,v]) : null;
     busy=false; ok.disabled=false;
     if(onOk){ S.solved.push(v); save(); onOk(); }
